@@ -38,8 +38,8 @@ interface GameContextType {
   openSenseiWithContext: (contextPrompt: string) => void;
   senseiInitialContext: string;
   // Auth methods
-  loginWithGoogle: (email: string, displayName: string, photoURL?: string) => void;
-  logoutAuth: () => void;
+  loginWithGoogle: (email?: string, displayName?: string, photoURL?: string) => Promise<boolean>;
+  logoutAuth: () => Promise<void>;
   isAuthModalOpen: boolean;
   openGoogleAuthModal: () => void;
   closeGoogleAuthModal: () => void;
@@ -312,31 +312,76 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Đã lưu thông tin hồ sơ!', '✅');
   };
 
-  // Google / Gmail Login with prompt: 'select_account'
-  const loginWithGoogle = (email: string, displayName: string, photoURL?: string) => {
-    soundService.play('victory');
-    const authProfile = googleAuthService.signInWithGoogle(email, displayName, photoURL);
-
-    setUser((prev) => {
-      const updated: UserStats = {
-        ...prev,
-        username: displayName || email.split('@')[0] || prev.username,
-        avatar: '🥷',
-        authProfile
-      };
-      storageService.saveUser(updated);
-      return updated;
+  // Lắng nghe trạng thái đăng nhập Firebase Auth thực tế
+  useEffect(() => {
+    const unsubscribe = googleAuthService.onAuthStateChange((profile, errorMsg) => {
+      if (errorMsg) {
+        soundService.play('wrong');
+        showToast(errorMsg, '⚠️');
+        setUser((prev) => storageService.logoutAndResetToGuest(prev));
+      } else if (profile) {
+        setUser((prev) => {
+          if (prev.authProfile?.email === profile.email && prev.authProfile?.isLoggedIn) {
+            return prev;
+          }
+          const updated: UserStats = {
+            ...prev,
+            username: profile.displayName || prev.username,
+            avatar: '🥷',
+            authProfile: profile
+          };
+          storageService.saveUser(updated);
+          return updated;
+        });
+      }
     });
 
-    showToast(`Đăng nhập Google thành công! Chào mừng ${displayName || email}`, '🌟', 'levelUp');
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [showToast]);
+
+  // YÊU CẦU 2 & 3: Đăng nhập bằng Google qua Firebase Auth SDK signInWithPopup và kiểm tra Whitelist
+  const loginWithGoogle = async (): Promise<boolean> => {
+    try {
+      const result = await googleAuthService.signInWithFirebasePopup();
+      if (!result.success || !result.profile) {
+        soundService.play('wrong');
+        showToast(result.error || 'Đăng nhập Google thất bại!', '⚠️');
+        return false;
+      }
+
+      soundService.play('victory');
+      const profile = result.profile;
+      setUser((prev) => {
+        const updated: UserStats = {
+          ...prev,
+          username: profile.displayName || prev.username,
+          avatar: '🥷',
+          authProfile: profile
+        };
+        storageService.saveUser(updated);
+        return updated;
+      });
+
+      showToast(`Đăng nhập Google thành công! Chào mừng ${profile.displayName || profile.email}`, '🌟', 'levelUp');
+      return true;
+    } catch (err: any) {
+      soundService.play('wrong');
+      showToast(err?.message || 'Lỗi khi đăng nhập bằng Google', '⚠️');
+      return false;
+    }
   };
 
-  // Requirement 5: Logout completely clears session, localStorage and resets to pure Guest Mode
-  const logoutAuth = () => {
+  // YÊU CẦU 5: Đăng xuất khỏi Firebase Auth và dọn sạch session/localStorage
+  const logoutAuth = async () => {
     soundService.play('click');
+    await googleAuthService.logout();
     const guestUser = storageService.logoutAndResetToGuest(user);
     setUser(guestUser);
-    showToast('Đã đăng xuất tài khoản Google. Đã xóa phiên làm việc và trở về trạng thái Khách hoàn toàn.', '👋');
+    showToast('Đã đăng xuất tài khoản Google. Đã trở về trạng thái Khách hoàn toàn.', '👋');
   };
 
   // Custom Knowledge Methods

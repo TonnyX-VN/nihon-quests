@@ -1,143 +1,131 @@
 import { UserAuthProfile } from '../types/game';
+import {
+  auth,
+  googleProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  isEmailAuthorized,
+  FirebaseUser
+} from './firebase';
 
-export const AUTH_SESSION_KEY = 'nihongo_quest_auth_session';
 export const AUTH_LOCAL_KEY = 'nihongo_quest_google_auth';
-export const AUTH_TOKEN_KEY = 'nihongo_quest_auth_token';
-
-/**
- * Cấu hình Google Auth Provider theo chuẩn Firebase Auth / Google OAuth.
- * Bắt buộc thiết lập `prompt: 'select_account'` theo yêu cầu
- * để luôn hiển thị danh sách chọn tài khoản Google chứ không tự động đăng nhập tài khoản cũ.
- */
-export interface GoogleAuthProviderInstance {
-  providerId: string;
-  scopes: string[];
-  customParameters: {
-    prompt: 'select_account';
-    [key: string]: string;
-  };
-  setCustomParameters: (params: Record<string, string>) => GoogleAuthProviderInstance;
-}
-
-/**
- * Factory tạo Google Auth Provider với thuộc tính bắt buộc `prompt: 'select_account'`
- */
-export function createGoogleAuthProvider(): GoogleAuthProviderInstance {
-  const provider: GoogleAuthProviderInstance = {
-    providerId: 'google.com',
-    scopes: ['profile', 'email', 'openid'],
-    customParameters: {
-      prompt: 'select_account',
-    },
-    setCustomParameters(params: Record<string, string>) {
-      Object.assign(this.customParameters, params);
-      return this;
-    }
-  };
-
-  // Đảm bảo bắt buộc đặt prompt: 'select_account'
-  provider.setCustomParameters({ prompt: 'select_account' });
-  return provider;
-}
-
-export const defaultGoogleProvider = createGoogleAuthProvider();
 
 export const googleAuthService = {
   /**
-   * Lấy cấu hình custom parameters của Google Provider (bắt buộc prompt: 'select_account')
+   * Đăng nhập bằng Google sử dụng hàm chuẩn `signInWithPopup(auth, googleProvider)` của Firebase Auth SDK.
+   * Đồng thời kiểm tra danh sách tài khoản được phép truy cập (whitelist).
    */
-  getCustomParameters() {
-    return defaultGoogleProvider.customParameters;
-  },
-
-  /**
-   * Kiểm tra xem có phiên đăng nhập Google hợp lệ đang hoạt động trong phiên hiện tại không.
-   * Mặc định khi mở mới ứng dụng không tự động phục hồi mock session.
-   */
-  hasActiveGoogleSession(): boolean {
-    if (typeof window === 'undefined') return false;
+  async signInWithFirebasePopup(): Promise<{ success: boolean; profile?: UserAuthProfile; error?: string }> {
     try {
-      const session = sessionStorage.getItem(AUTH_SESSION_KEY);
-      if (session) {
-        const parsed = JSON.parse(session);
-        return parsed?.provider === 'google' && parsed?.isLoggedIn === true;
+      // 1. Gọi trực tiếp signInWithPopup của Firebase Auth SDK
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      if (!user || !user.email) {
+        throw new Error('Không nhận được thông tin email từ Google.');
       }
-      return false;
-    } catch {
-      return false;
+
+      // 2. YÊU CẦU 3: Kiểm tra email với whitelist
+      const isAllowed = isEmailAuthorized(user.email);
+      if (!isAllowed) {
+        // Tự động signOut ngay lập tức
+        await signOut(auth);
+        this.logout();
+        return {
+          success: false,
+          error: `Tài khoản (${user.email}) chưa được cấp quyền truy cập. Vui lòng liên hệ quản trị viên hoặc sử dụng tài khoản được phê duyệt.`
+        };
+      }
+
+      // 3. Nếu được cấp quyền, tạo profile và trả về
+      const profile: UserAuthProfile = {
+        provider: 'google',
+        isLoggedIn: true,
+        email: user.email,
+        displayName: user.displayName || user.email.split('@')[0],
+        photoURL: user.photoURL || undefined,
+        uid: user.uid,
+        loggedInAt: new Date().toISOString()
+      };
+
+      return {
+        success: true,
+        profile
+      };
+    } catch (err: any) {
+      console.error('[Firebase Auth] Error during signInWithPopup:', err);
+
+      // Xử lý các mã lỗi phổ biến của Firebase
+      let errorMessage = err?.message || 'Đăng nhập Google thất bại.';
+      if (err?.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Cửa sổ đăng nhập Google đã bị đóng.';
+      } else if (err?.code === 'auth/cancelled-popup-request') {
+        errorMessage = 'Yêu cầu mở cửa sổ đăng nhập đã bị hủy.';
+      } else if (err?.code === 'auth/unauthorized-domain') {
+        errorMessage = 'Tên miền chưa được thêm vào Authorized Domains trên Firebase Console.';
+      } else if (err?.code === 'auth/popup-blocked') {
+        errorMessage = 'Trình duyệt đã chặn cửa sổ Popup. Vui lòng cho phép popup để đăng nhập.';
+      }
+
+      return {
+        success: false,
+        error: errorMessage
+      };
     }
   },
 
   /**
-   * Lấy profile phiên hiện tại nếu đã đăng nhập rõ ràng
+   * Đăng xuất khỏi Firebase Auth và xóa sạch phiên làm việc
    */
-  getCurrentSessionProfile(): UserAuthProfile | null {
-    if (typeof window === 'undefined') return null;
+  async logout(): Promise<void> {
     try {
-      const session = sessionStorage.getItem(AUTH_SESSION_KEY);
-      if (session) {
-        const parsed = JSON.parse(session);
-        if (parsed?.provider === 'google' && parsed?.isLoggedIn === true) {
-          return parsed;
-        }
-      }
-      return null;
-    } catch {
-      return null;
+      await signOut(auth);
+    } catch (err) {
+      console.warn('[Firebase Auth] SignOut warning:', err);
     }
-  },
-
-  /**
-   * Xử lý Đăng nhập Google với thuộc tính bắt buộc prompt: 'select_account'
-   */
-  signInWithGoogle(email: string, displayName: string, photoURL?: string): UserAuthProfile {
-    // Luôn áp dụng provider có prompt: 'select_account'
-    const provider = createGoogleAuthProvider();
-    console.log(
-      `[Google Auth] Executing sign-in with provider: ${provider.providerId}, prompt: '${provider.customParameters.prompt}' for ${email}`
-    );
-
-    const profile: UserAuthProfile = {
-      provider: 'google',
-      isLoggedIn: true,
-      email,
-      displayName: displayName || email.split('@')[0],
-      photoURL: photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(displayName || email)}`,
-      uid: `g_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-      loggedInAt: new Date().toISOString()
-    };
 
     if (typeof window !== 'undefined') {
       try {
-        sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(profile));
-        localStorage.setItem(AUTH_LOCAL_KEY, JSON.stringify(profile));
-      } catch {
-        // ignore
-      }
-    }
-
-    return profile;
-  },
-
-  /**
-   * Yêu cầu 5: Cập nhật hàm Đăng xuất (Logout)
-   * Xóa sạch phiên làm việc (Session), localStorage và đưa ứng dụng về trạng thái Khách (Guest) hoàn toàn.
-   */
-  logout() {
-    if (typeof window !== 'undefined') {
-      try {
-        // Xóa sạch session storage
-        sessionStorage.removeItem(AUTH_SESSION_KEY);
         sessionStorage.clear();
-
-        // Xóa sạch các khóa liên quan đến Google Auth trong localStorage
-        localStorage.removeItem(AUTH_SESSION_KEY);
         localStorage.removeItem(AUTH_LOCAL_KEY);
-        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem('nihongo_quest_auth_session');
+        localStorage.removeItem('nihongo_quest_auth_token');
         localStorage.removeItem('nihongo_quest_current_user');
       } catch (err) {
-        console.error('[Google Auth] Error during logout cleanup:', err);
+        console.error('[Google Auth] Logout cleanup error:', err);
       }
     }
+  },
+
+  /**
+   * Lắng nghe trạng thái đăng nhập thực tế từ Firebase Auth (onAuthStateChanged)
+   */
+  onAuthStateChange(callback: (profile: UserAuthProfile | null, errorMsg?: string) => void) {
+    return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser && firebaseUser.email) {
+        // Kiểm tra whitelist
+        if (!isEmailAuthorized(firebaseUser.email)) {
+          console.warn(`[Firebase Auth] Email ${firebaseUser.email} is unauthorized. Signing out automatically.`);
+          await signOut(auth);
+          this.logout();
+          callback(null, 'Tài khoản của bạn chưa được cấp quyền truy cập');
+          return;
+        }
+
+        const profile: UserAuthProfile = {
+          provider: 'google',
+          isLoggedIn: true,
+          email: firebaseUser.email,
+          displayName: firebaseUser.displayName || firebaseUser.email.split('@')[0],
+          photoURL: firebaseUser.photoURL || undefined,
+          uid: firebaseUser.uid,
+          loggedInAt: new Date().toISOString()
+        };
+        callback(profile);
+      } else {
+        callback(null);
+      }
+    });
   }
 };

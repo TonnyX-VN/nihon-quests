@@ -172,22 +172,11 @@ export const storageService = {
       /**
        * Yêu cầu 1: Reset và xóa bỏ trạng thái tự động đăng nhập mặc định (Auto-login / Mock session).
        * Yêu cầu 2: Khi người dùng mở ứng dụng, mặc định phải ở trạng thái Chưa đăng nhập (Guest Mode).
-       * Nếu không có phiên chủ động được kích hoạt trong tab hiện tại, bắt buộc đưa về Guest Mode hoàn toàn.
+       * Phiên đăng nhập thực tế sẽ được Firebase Auth đồng bộ qua onAuthStateChanged.
        */
-      const hasActiveSession = googleAuthService.hasActiveGoogleSession();
-      if (!hasActiveSession) {
-        parsed.authProfile = { ...GUEST_AUTH_PROFILE };
-        // Nếu username cũ còn lưu tên tài khoản tự động, trả về tên Khách
-        if (!parsed.username || parsed.username === 'Chiến Binh Sakura' || parsed.username.includes('@')) {
-          parsed.username = 'Khách Phiêu Lưu';
-        }
-      } else {
-        const activeProfile = googleAuthService.getCurrentSessionProfile();
-        if (activeProfile) {
-          parsed.authProfile = activeProfile;
-        } else {
-          parsed.authProfile = { ...GUEST_AUTH_PROFILE };
-        }
+      parsed.authProfile = { ...GUEST_AUTH_PROFILE };
+      if (!parsed.username || parsed.username === 'Chiến Binh Sakura' || parsed.username.includes('@')) {
+        parsed.username = 'Khách Phiêu Lưu';
       }
 
       // Refresh daily quests if new day
