@@ -1,0 +1,6 @@
+{
+  "name": "Nihongo Quest — 日本語クエスト",
+  "description": "Học như chơi – Chơi mà vẫn giỏi tiếng Nhật! Web app RPG game hóa việc học tiếng Nhật cho JLPT N5, N4, N3.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
