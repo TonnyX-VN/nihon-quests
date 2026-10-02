@@ -10,20 +10,21 @@ import {
 } from 'firebase/auth';
 
 /**
- * CẤU HÌNH FIREBASE AUTH (CODE NGẦM)
- * Chứa trực tiếp thông số Firebase project. Bạn có thể sửa trực tiếp tại đây
- * hoặc cấu hình qua các biến môi trường VITE_FIREBASE_* trong .env
+ * CẤU HÌNH FIREBASE AUTH CHÍNH XÁC
+ * Dự án: nihon-quests
+ * Đã cấu hình apiKey chuẩn để khắc phục hoàn toàn lỗi 'auth/api-key-not-valid'
  */
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSySampleApiKeyNihongoQuest2026",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "nihongo-quest-auth.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "nihongo-quest-auth",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "nihongo-quest-auth.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "102938475610",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:102938475610:web:8a9b0c1d2e3f4a5b"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDwIbLOCeV5XFvJRsU5cE2FqVm0DRU76Vk",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "nihon-quests.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "nihon-quests",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "nihon-quests.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "973410735031",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:973410735031:web:d2676ff447d91a2664ce32",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-783SCZW47J"
 };
 
-// Khởi tạo Firebase App
+// Khởi tạo Firebase App đảm bảo duy nhất 1 instance
 let app: FirebaseApp;
 try {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);

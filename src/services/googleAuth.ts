@@ -58,12 +58,16 @@ export const googleAuthService = {
 
       // Xử lý các mã lỗi phổ biến của Firebase
       let errorMessage = err?.message || 'Đăng nhập Google thất bại.';
-      if (err?.code === 'auth/popup-closed-by-user') {
+      if (err?.code === 'auth/api-key-not-valid') {
+        errorMessage = 'API Key của Firebase không hợp lệ hoặc bị giới hạn. Vui lòng kiểm tra lại Google Cloud / Firebase API Key.';
+      } else if (err?.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Chưa bật nhà cung cấp Google trong Firebase Console (Authentication > Sign-in method > Google).';
+      } else if (err?.code === 'auth/unauthorized-domain') {
+        errorMessage = 'Tên miền chưa được thêm vào Authorized Domains trên Firebase Console (Authentication > Settings > Authorized domains).';
+      } else if (err?.code === 'auth/popup-closed-by-user') {
         errorMessage = 'Cửa sổ đăng nhập Google đã bị đóng.';
       } else if (err?.code === 'auth/cancelled-popup-request') {
         errorMessage = 'Yêu cầu mở cửa sổ đăng nhập đã bị hủy.';
-      } else if (err?.code === 'auth/unauthorized-domain') {
-        errorMessage = 'Tên miền chưa được thêm vào Authorized Domains trên Firebase Console.';
       } else if (err?.code === 'auth/popup-blocked') {
         errorMessage = 'Trình duyệt đã chặn cửa sổ Popup. Vui lòng cho phép popup để đăng nhập.';
       }
