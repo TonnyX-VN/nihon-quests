@@ -43,6 +43,7 @@ export interface CustomKnowledgeItem {
   tags?: string[];
   createdAt: string;
   mastery: number; // 0 - 5
+  userId?: string; // Gắn ID người dùng sở hữu dữ liệu
 }
 
 export interface Stage {
@@ -121,6 +122,7 @@ export interface UserAuthProfile {
 }
 
 export interface UserStats {
+  userId?: string; // Gắn ID người dùng (Firebase Auth UID hoặc 'guest')
   username: string;
   avatar: string;
   level: number;

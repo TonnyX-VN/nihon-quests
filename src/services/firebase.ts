@@ -8,6 +8,16 @@ import {
   Auth,
   User as FirebaseUser
 } from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs
+} from 'firebase/firestore';
 
 /**
  * CẤU HÌNH FIREBASE AUTH CHÍNH XÁC
@@ -50,5 +60,20 @@ export function isEmailAuthorized(_email?: string | null): boolean {
   return true;
 }
 
-// Re-export các phương thức Firebase Auth cần thiết
-export { signInWithPopup, signOut, onAuthStateChanged, type FirebaseUser };
+// Khởi tạo Firestore Database
+export const db = getFirestore(app);
+
+// Re-export các phương thức Firebase Auth & Firestore cần thiết
+export {
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+  type FirebaseUser,
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs
+};

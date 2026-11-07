@@ -128,64 +128,118 @@ export const GUEST_AUTH_PROFILE: UserAuthProfile = {
   loggedInAt: undefined
 };
 
-export const INITIAL_USER_STATS: UserStats = {
-  username: 'Khách Phiêu Lưu',
-  avatar: '🥷',
-  level: 1,
-  xp: 120,
-  totalXp: 120,
-  streak: 7,
-  lastActiveDate: new Date().toISOString().split('T')[0],
-  completedStages: {},
-  wrongQuestions: {},
-  unlockedAchievements: [],
-  dailyQuests: getDefaultDailyQuests(),
-  lastDailyQuestDate: new Date().toISOString().split('T')[0],
-  battlesWon: 0,
-  vocabLearnedCount: 0,
-  kanjiLearnedCount: 0,
-  grammarLearnedCount: 0,
-  soundEnabled: true,
-  furiganaEnabled: true,
-  language: 'vi',
-  customKnowledge: INITIAL_CUSTOM_KNOWLEDGE,
-  authProfile: GUEST_AUTH_PROFILE
-};
+/**
+ * Tạo bộ dữ liệu mới sạch sẽ cho tài khoản (không dùng chung hay kế thừa từ tài khoản khác)
+ */
+export function createNewUserStats(
+  uid?: string,
+  displayName?: string,
+  email?: string,
+  photoURL?: string
+): UserStats {
+  const isGuest = !uid || uid === 'guest';
+  const today = new Date().toISOString().split('T')[0];
+
+  return {
+    userId: isGuest ? 'guest' : uid,
+    username: displayName || (isGuest ? 'Khách Phiêu Lưu' : email?.split('@')[0] || 'Chiến Binh Sakura'),
+    avatar: '🥷',
+    level: 1,
+    xp: isGuest ? 120 : 0,
+    totalXp: isGuest ? 120 : 0,
+    streak: isGuest ? 7 : 1,
+    lastActiveDate: today,
+    completedStages: {},
+    wrongQuestions: {},
+    unlockedAchievements: [],
+    dailyQuests: getDefaultDailyQuests(),
+    lastDailyQuestDate: today,
+    battlesWon: 0,
+    vocabLearnedCount: 0,
+    kanjiLearnedCount: 0,
+    grammarLearnedCount: 0,
+    soundEnabled: true,
+    furiganaEnabled: true,
+    language: 'vi',
+    customKnowledge: isGuest ? { ...INITIAL_CUSTOM_KNOWLEDGE } : {},
+    authProfile: isGuest
+      ? { ...GUEST_AUTH_PROFILE }
+      : {
+          provider: 'google',
+          isLoggedIn: true,
+          email,
+          displayName,
+          photoURL,
+          uid,
+          loggedInAt: new Date().toISOString()
+        }
+  };
+}
+
+export const INITIAL_USER_STATS: UserStats = createNewUserStats('guest');
+
+/**
+ * 2. LỌC DỮ LIỆU LOCALSTORAGE:
+ * Đặt tên khóa (key) có gắn kèm `uid` để phân tách tuyệt đối giữa các tài khoản.
+ */
+export function getUserStorageKey(uid?: string | null): string {
+  if (!uid || uid === 'guest') {
+    return 'nihongo_quest_guest_data';
+  }
+  return `nihongo_quest_user_${uid}`;
+}
 
 export const storageService = {
-  loadUser(): UserStats {
+  /**
+   * Truy vấn nạp dữ liệu riêng biệt theo từng userId (UID)
+   */
+  loadUser(uid?: string | null, fallbackProfile?: UserAuthProfile): UserStats {
     if (typeof window === 'undefined') return INITIAL_USER_STATS;
+    const targetUid = uid || 'guest';
+    const storageKey = getUserStorageKey(targetUid);
+
     try {
-      const data = localStorage.getItem(STORAGE_KEY);
+      const data = localStorage.getItem(storageKey);
       if (!data) {
-        this.saveUser(INITIAL_USER_STATS);
-        return INITIAL_USER_STATS;
+        // Tài khoản chưa có dữ liệu -> Tạo mới độc lập hoàn toàn cho UID này
+        const freshStats = createNewUserStats(
+          targetUid,
+          fallbackProfile?.displayName,
+          fallbackProfile?.email,
+          fallbackProfile?.photoURL
+        );
+        this.saveUser(freshStats, targetUid);
+        return freshStats;
       }
+
       const parsed = JSON.parse(data) as UserStats;
       const today = new Date().toISOString().split('T')[0];
 
-      // Ensure customKnowledge field exists
+      // Đảm bảo luôn gắn đúng userId vào object dữ liệu
+      parsed.userId = targetUid;
+
+      // Đảm bảo customKnowledge tồn tại
       if (!parsed.customKnowledge) {
-        parsed.customKnowledge = INITIAL_CUSTOM_KNOWLEDGE;
+        parsed.customKnowledge = targetUid === 'guest' ? { ...INITIAL_CUSTOM_KNOWLEDGE } : {};
       }
 
-      /**
-       * Yêu cầu 1: Reset và xóa bỏ trạng thái tự động đăng nhập mặc định (Auto-login / Mock session).
-       * Yêu cầu 2: Khi người dùng mở ứng dụng, mặc định phải ở trạng thái Chưa đăng nhập (Guest Mode).
-       * Phiên đăng nhập thực tế sẽ được Firebase Auth đồng bộ qua onAuthStateChanged.
-       */
-      parsed.authProfile = { ...GUEST_AUTH_PROFILE };
-      if (!parsed.username || parsed.username === 'Chiến Binh Sakura' || parsed.username.includes('@')) {
-        parsed.username = 'Khách Phiêu Lưu';
+      // Đảm bảo authProfile phù hợp
+      if (targetUid === 'guest') {
+        parsed.authProfile = { ...GUEST_AUTH_PROFILE };
+        if (!parsed.username || parsed.username.includes('@')) {
+          parsed.username = 'Khách Phiêu Lưu';
+        }
+      } else if (fallbackProfile) {
+        parsed.authProfile = { ...fallbackProfile };
       }
 
-      // Refresh daily quests if new day
+      // Refresh daily quests nếu sang ngày mới
       if (parsed.lastDailyQuestDate !== today) {
         parsed.dailyQuests = getDefaultDailyQuests();
         parsed.lastDailyQuestDate = today;
       }
 
-      // Check streak logic
+      // Streak logic
       if (parsed.lastActiveDate !== today) {
         const last = new Date(parsed.lastActiveDate).getTime();
         const now = new Date(today).getTime();
@@ -200,41 +254,52 @@ export const storageService = {
 
       return parsed;
     } catch {
-      return INITIAL_USER_STATS;
+      return createNewUserStats(
+        targetUid,
+        fallbackProfile?.displayName,
+        fallbackProfile?.email,
+        fallbackProfile?.photoURL
+      );
     }
   },
 
-  saveUser(stats: UserStats) {
+  /**
+   * 1. GẮN USER ID KHI LƯU DỮ LIỆU VÀO LOCALSTORAGE:
+   * Luôn gắn userId vào đối tượng và lưu vào đúng key `nihongo_quest_user_${uid}`
+   */
+  saveUser(stats: UserStats, explicitUid?: string | null) {
     if (typeof window === 'undefined') return;
+    const currentUid = explicitUid || stats.userId || stats.authProfile?.uid || 'guest';
+    const storageKey = getUserStorageKey(currentUid);
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
+      const dataWithUserId: UserStats = {
+        ...stats,
+        userId: currentUid
+      };
+      localStorage.setItem(storageKey, JSON.stringify(dataWithUserId));
     } catch {
       // ignore
     }
   },
 
   /**
-   * Yêu cầu 5: Đăng xuất và đưa ứng dụng về trạng thái Khách hoàn toàn
+   * 3. XỬ LÝ KHI ĐĂNG XUẤT:
+   * Xóa sạch các phiên làm việc tạm và trả về dữ liệu Khách hoàn toàn mới/độc lập
    */
-  logoutAndResetToGuest(currentUser: UserStats): UserStats {
+  logoutAndResetToGuest(): UserStats {
     googleAuthService.logout();
 
-    const guestUser: UserStats = {
-      ...currentUser,
-      username: 'Khách Phiêu Lưu',
-      avatar: '🥷',
-      authProfile: { ...GUEST_AUTH_PROFILE }
-    };
-
-    this.saveUser(guestUser);
+    // Nạp dữ liệu riêng biệt của Khách (không mang theo bất kỳ dữ liệu nào của tài khoản vừa đăng xuất)
+    const guestUser = this.loadUser('guest');
     return guestUser;
   },
 
-  resetAll(): UserStats {
+  resetAll(uid?: string | null): UserStats {
     if (typeof window !== 'undefined') {
-      googleAuthService.logout();
-      localStorage.removeItem(STORAGE_KEY);
+      const targetUid = uid || 'guest';
+      localStorage.removeItem(getUserStorageKey(targetUid));
     }
-    return INITIAL_USER_STATS;
+    return createNewUserStats(uid || 'guest');
   }
 };

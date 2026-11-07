@@ -5,6 +5,8 @@ import { INITIAL_ACHIEVEMENTS } from '../data/achievements';
 import { soundService } from '../services/sound';
 import { REGIONS } from '../data/stages';
 import { googleAuthService } from '../services/googleAuth';
+import { firestoreSyncService } from '../services/firestoreSync';
+import { auth } from '../services/firebase';
 
 interface GameToast {
   id: number;
@@ -73,9 +75,15 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     soundService.enabled = user.soundEnabled;
   }, [user.soundEnabled]);
 
-  // Persist user changes to storage
+  // 1. GẮN USER ID KHI LƯU DỮ LIỆU: Lưu vào đúng key LocalStorage của UID và đồng bộ Firestore
   useEffect(() => {
-    storageService.saveUser(user);
+    const currentUid = user.userId || auth.currentUser?.uid || user.authProfile?.uid || 'guest';
+    storageService.saveUser(user, currentUid);
+
+    // Đồng bộ lên Firestore nếu tài khoản đã đăng nhập
+    if (currentUid !== 'guest') {
+      firestoreSyncService.saveUserData(user);
+    }
   }, [user]);
 
   const showToast = useCallback((text: string, icon: string, type: GameToast['type'] = 'success') => {
@@ -312,26 +320,54 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     showToast('Đã lưu thông tin hồ sơ!', '✅');
   };
 
-  // Lắng nghe trạng thái đăng nhập Firebase Auth thực tế
+  /**
+   * Chuyển đổi và nạp dữ liệu riêng biệt cho từng tài khoản (cách ly hoàn toàn giữa các UID)
+   */
+  const handleUserAccountChange = useCallback(async (uid: string, profile: UserAuthProfile) => {
+    // 1. Nạp ngay lập tức dữ liệu độc lập của UID từ LocalStorage (key: nihongo_quest_user_${uid})
+    const localData = storageService.loadUser(uid, profile);
+    setUser(localData);
+
+    // 2. LỌC DỮ LIỆU KHI TRUY VẤN: Gọi Firestore với .where('userId', '==', uid)
+    try {
+      const cloudData = await firestoreSyncService.fetchUserData(uid);
+      if (cloudData && cloudData.userId === uid) {
+        const mergedData: UserStats = {
+          ...cloudData,
+          userId: uid,
+          authProfile: profile
+        };
+        setUser(mergedData);
+        storageService.saveUser(mergedData, uid);
+      } else {
+        // Nếu trên đám mây chưa có dữ liệu cho UID này, lưu bản khởi tạo độc lập lên Firestore
+        await firestoreSyncService.saveUserData(localData);
+      }
+    } catch (err) {
+      console.warn('[GameContext] Lỗi khi đồng bộ dữ liệu đám mây:', err);
+    }
+  }, []);
+
+  // 3. XỬ LÝ KHI ĐĂNG NHẬP / ĐĂNG XUẤT QUA FIREBASE AUTH:
   useEffect(() => {
-    const unsubscribe = googleAuthService.onAuthStateChange((profile, errorMsg) => {
+    const unsubscribe = googleAuthService.onAuthStateChange(async (profile, errorMsg) => {
       if (errorMsg) {
         soundService.play('wrong');
         showToast(errorMsg, '⚠️');
-        setUser((prev) => storageService.logoutAndResetToGuest(prev));
-      } else if (profile) {
+        // Khi lỗi hoặc bị từ chối: xóa sạch dữ liệu trên state và chuyển về Khách
+        const cleanGuest = storageService.logoutAndResetToGuest();
+        setUser(cleanGuest);
+        setActiveStage(null);
+      } else if (profile && profile.uid) {
+        // Người dùng đăng nhập tài khoản Google mới -> Lập tức fetch lại dữ liệu riêng biệt
+        await handleUserAccountChange(profile.uid, profile);
+      } else {
+        // Trạng thái Chưa đăng nhập / Guest
         setUser((prev) => {
-          if (prev.authProfile?.email === profile.email && prev.authProfile?.isLoggedIn) {
+          if (prev.userId === 'guest' && !prev.authProfile?.isLoggedIn) {
             return prev;
           }
-          const updated: UserStats = {
-            ...prev,
-            username: profile.displayName || prev.username,
-            avatar: '🥷',
-            authProfile: profile
-          };
-          storageService.saveUser(updated);
-          return updated;
+          return storageService.loadUser('guest');
         });
       }
     });
@@ -341,32 +377,21 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unsubscribe();
       }
     };
-  }, [showToast]);
+  }, [handleUserAccountChange, showToast]);
 
-  // Đăng nhập bằng Google qua Firebase Auth SDK signInWithPopup (Cho phép tất cả tài khoản Google)
+  // Đăng nhập bằng Google qua Firebase Auth SDK signInWithPopup
   const loginWithGoogle = async (): Promise<boolean> => {
     try {
       const result = await googleAuthService.signInWithFirebasePopup();
-      if (!result.success || !result.profile) {
-        soundService.play('wrong');
-        showToast(result.error || 'Đăng nhập Google thất bại!', '⚠️');
-        return false;
+      const profile = result.profile;
+      if (!profile || !profile.uid) {
+        throw new Error('Không nhận được UID người dùng từ Google.');
       }
 
-      soundService.play('victory');
-      const profile = result.profile;
-      setUser((prev) => {
-        const updated: UserStats = {
-          ...prev,
-          username: profile.displayName || prev.username,
-          avatar: '🥷',
-          authProfile: profile
-        };
-        storageService.saveUser(updated);
-        return updated;
-      });
+      // Lập tức nạp dữ liệu riêng biệt của UID vừa đăng nhập
+      await handleUserAccountChange(profile.uid, profile);
 
-      showToast(`Đăng nhập Google thành công! Chào mừng ${profile.displayName || profile.email}`, '🌟', 'levelUp');
+      showToast(`Đăng nhập thành công! Chào mừng ${profile.displayName || profile.email}`, '🌟', 'levelUp');
       return true;
     } catch (err: any) {
       soundService.play('wrong');
@@ -375,27 +400,37 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // YÊU CẦU 5: Đăng xuất khỏi Firebase Auth và dọn sạch session/localStorage
+  // 3. XỬ LÝ KHI ĐĂNG XUẤT:
+  // Khi người dùng đăng xuất (logout), phải xóa toàn bộ dữ liệu tạm thời trên giao diện state/store.
   const logoutAuth = async () => {
     soundService.play('click');
     await googleAuthService.logout();
-    const guestUser = storageService.logoutAndResetToGuest(user);
-    setUser(guestUser);
-    showToast('Đã đăng xuất tài khoản Google. Đã trở về trạng thái Khách hoàn toàn.', '👋');
+
+    // Xóa sạch dữ liệu trên state, trả về state Khách độc lập (0 điểm, level 1, không lẫn dữ liệu tài khoản vừa thoát)
+    const cleanGuest = storageService.logoutAndResetToGuest();
+    setUser(cleanGuest);
+    setActiveStage(null);
+    setViewInternal('home');
+    setBreadcrumbs(['Trang Chủ']);
+    showToast('Đã đăng xuất tài khoản Google. Toàn bộ dữ liệu tạm thời đã được làm sạch.', '👋');
   };
 
-  // Custom Knowledge Methods
+  // 1. GẮN USER ID KHI TẠO MỚI DỮ LIỆU KIẾN THỨC TỰ THÊM (CUSTOM KNOWLEDGE)
   const addCustomKnowledge = (item: Omit<CustomKnowledgeItem, 'id' | 'createdAt' | 'mastery'>) => {
     const id = `custom_${Date.now()}`;
+    const currentUid = auth.currentUser?.uid || user.userId || user.authProfile?.uid || 'guest';
+
     const newItem: CustomKnowledgeItem = {
       ...item,
       id,
+      userId: currentUid, // Bắt buộc đính kèm userId
       createdAt: new Date().toISOString(),
       mastery: 1
     };
 
     setUser((prev) => ({
       ...prev,
+      userId: currentUid,
       customKnowledge: {
         ...prev.customKnowledge,
         [id]: newItem
@@ -517,8 +552,9 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!parsed.username || !parsed.level) {
         throw new Error('Dữ liệu không hợp lệ');
       }
+      parsed.userId = user.userId || auth.currentUser?.uid || 'guest';
       setUser(parsed);
-      storageService.saveUser(parsed);
+      storageService.saveUser(parsed, parsed.userId);
       soundService.play('victory');
       showToast('Đồng bộ dữ liệu thành công!', '🎉');
       return true;
@@ -529,11 +565,12 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetProgress = () => {
-    const fresh = storageService.resetAll();
+    const currentUid = user.userId || auth.currentUser?.uid || user.authProfile?.uid || 'guest';
+    const fresh = storageService.resetAll(currentUid);
     setUser(fresh);
     setViewInternal('home');
     setBreadcrumbs(['Trang Chủ']);
-    showToast('Đã đặt lại toàn bộ tiến độ chơi!', '🔄');
+    showToast('Đã đặt lại toàn bộ tiến độ chơi của tài khoản hiện tại!', '🔄');
   };
 
   const openSenseiWithContext = (contextPrompt: string) => {
