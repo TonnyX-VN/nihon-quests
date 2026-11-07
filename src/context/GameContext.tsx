@@ -359,6 +359,8 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(cleanGuest);
         setActiveStage(null);
       } else if (profile && profile.uid) {
+        // 2. Tự động ẩn mọi popup/overlay tài khoản khi người dùng đã authenticated thành công qua onAuthStateChanged
+        setIsAuthModalOpen(false);
         // Người dùng đăng nhập tài khoản Google mới -> Lập tức fetch lại dữ liệu riêng biệt
         await handleUserAccountChange(profile.uid, profile);
       } else {
@@ -388,7 +390,14 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
         throw new Error('Không nhận được UID người dùng từ Google.');
       }
 
-      // Lập tức nạp dữ liệu riêng biệt của UID vừa đăng nhập
+      // 1. ĐÓNG MODAL/POPUP SAU KHI ĐĂNG NHẬP THÀNH CÔNG:
+      // Ngay sau khi xác thực thành công (nhận được result.user/profile), gọi ngay hàm đóng popup/modal
+      setIsAuthModalOpen(false);
+
+      soundService.play('victory');
+
+      // 2. ĐỒNG BỘ TRẠNG THÁI NGƯỜI DÙNG:
+      // Cập nhật state user đồng thời để giao diện chính tự động render mà không bị kẹt ở popup
       await handleUserAccountChange(profile.uid, profile);
 
       showToast(`Đăng nhập thành công! Chào mừng ${profile.displayName || profile.email}`, '🌟', 'levelUp');

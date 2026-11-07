@@ -15,8 +15,16 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({ isOpen, onClos
 
   const isGoogleLoggedIn = user.authProfile?.provider === 'google' && user.authProfile?.isLoggedIn;
 
+  // 2. Tự động ẩn modal tài khoản khi người dùng đã authenticated thành công
+  React.useEffect(() => {
+    if (isGoogleLoggedIn && isProcessing) {
+      setIsProcessing(false);
+      onClose();
+    }
+  }, [isGoogleLoggedIn, isProcessing, onClose]);
+
   /**
-   * Gọi trực tiếp signInWithPopup của Firebase Auth SDK
+   * 1. Gọi trực tiếp signInWithPopup của Firebase Auth SDK và đóng ngay modal khi thành công
    */
   const handleFirebaseGoogleSignIn = async () => {
     setIsProcessing(true);
@@ -25,8 +33,11 @@ export const GoogleAuthModal: React.FC<GoogleAuthModalProps> = ({ isOpen, onClos
       if (success) {
         onClose();
       }
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsProcessing(false);
+      onClose();
     }
   };
 
