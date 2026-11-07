@@ -20,8 +20,8 @@ export const Header: React.FC = () => {
             onClick={() => setView('home')}
             className="flex items-center gap-2 cursor-pointer group select-none flex-shrink-0"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-lg shadow-rose-950/60 ring-2 ring-rose-400/30 group-hover:scale-105 transition-transform">
-              <span className="text-lg sm:text-xl">🌸</span>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-lg shadow-rose-950/60 ring-2 ring-rose-400/30 group-hover:scale-105 transition-transform overflow-hidden p-1">
+              <img src="/favicon.png" alt="Nihongo Quest" className="w-full h-full object-contain drop-shadow" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
