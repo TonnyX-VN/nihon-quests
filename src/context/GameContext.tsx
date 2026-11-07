@@ -343,7 +343,7 @@ export const GameProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [showToast]);
 
-  // YÊU CẦU 2 & 3: Đăng nhập bằng Google qua Firebase Auth SDK signInWithPopup và kiểm tra Whitelist
+  // Đăng nhập bằng Google qua Firebase Auth SDK signInWithPopup (Cho phép tất cả tài khoản Google)
   const loginWithGoogle = async (): Promise<boolean> => {
     try {
       const result = await googleAuthService.signInWithFirebasePopup();

@@ -19,6 +19,7 @@ export const ListeningQuest: React.FC<ListeningQuestProps> = ({
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [answeredState, setAnsweredState] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const textToSpeak = item.audioText || item.question;
 
@@ -29,15 +30,33 @@ export const ListeningQuest: React.FC<ListeningQuestProps> = ({
   };
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedChoice(null);
+    setAnsweredState('idle');
+
     // Auto-play audio on question load
     const timer = setTimeout(() => {
       playVoice();
     }, 400);
-    return () => clearTimeout(timer);
-  }, [item]);
+
+    return () => {
+      clearTimeout(timer);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [item.id]);
 
   const handleSelect = (choice: string) => {
     if (answeredState !== 'idle') return;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setSelectedChoice(choice);
 
     const isCorrect = choice === item.correctAnswer;
@@ -50,6 +69,23 @@ export const ListeningQuest: React.FC<ListeningQuestProps> = ({
       soundService.play('wrong');
       onAnswer(false);
     }
+
+    timerRef.current = setTimeout(() => {
+      setSelectedChoice(null);
+      setAnsweredState('idle');
+      timerRef.current = null;
+      onNext();
+    }, 1400);
+  };
+
+  const handleManualNext = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedChoice(null);
+    setAnsweredState('idle');
+    onNext();
   };
 
   return (
@@ -137,7 +173,7 @@ export const ListeningQuest: React.FC<ListeningQuestProps> = ({
               {answeredState === 'correct' ? '🎉 Chính xác! Bạn nghe rất chuẩn!' : '❌ Chưa chính xác!'}
             </span>
             <button
-              onClick={onNext}
+              onClick={handleManualNext}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-slate-950 hover:bg-slate-200 shadow transition cursor-pointer"
             >
               <span>Tiếp tục</span>

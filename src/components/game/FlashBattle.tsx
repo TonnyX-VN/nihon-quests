@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LearningItem } from '../../types/game';
 import { soundService } from '../../services/sound';
 import { Volume2, Swords, Sparkles, ArrowRight } from 'lucide-react';
@@ -18,13 +18,56 @@ export const FlashBattle: React.FC<FlashBattleProps> = ({
   onAnswer,
   onNext,
 }) => {
-  const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
+  // Trạng thái lựa chọn và nộp bài
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [answeredState, setAnsweredState] = useState<'idle' | 'correct' | 'wrong'>('idle');
-  const [slashAnim, setSlashAnim] = useState(false);
+  const [slashAnim, setSlashAnim] = useState<boolean>(false);
 
-  const handleSelect = (choice: string) => {
-    if (answeredState !== 'idle') return;
-    setSelectedChoice(choice);
+  // Ref lưu timer tự chuyển câu sau 1 - 1.5 giây
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Reset hoàn toàn trạng thái và hủy bất kỳ bộ đếm thời gian nào khi chuyển sang câu mới
+   * Tuyệt đối không tự động chọn đáp án hay tự qua câu khi người dùng chưa tương tác.
+   */
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedAnswer(null);
+    setIsSubmitted(false);
+    setAnsweredState('idle');
+    setSlashAnim(false);
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [item.id]);
+
+  /**
+   * YÊU CẦU 1:
+   * Sửa lại hàm xử lý khi người dùng chọn đáp án (handleAnswerSelect).
+   * Chỉ chuyển sang câu tiếp theo KHI VÀ CHỈ KHI người dùng chủ động click chọn một đáp án.
+   * Sau khi chọn đáp án, chờ khoảng 1 - 1.5 giây để hiển thị phản hồi Đúng/Sai,
+   * sau đó reset toàn bộ trạng thái đã chọn (selectedAnswer = null, isSubmitted = false) rồi mới sang câu hỏi mới.
+   */
+  const handleAnswerSelect = (choice: string) => {
+    // Chỉ kích hoạt khi người dùng click chủ động và chưa nộp bài
+    if (isSubmitted || answeredState !== 'idle') return;
+
+    // Hủy bỏ bất kỳ bộ đếm thời gian cũ
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    setSelectedAnswer(choice);
+    setIsSubmitted(true);
 
     const isCorrect = choice === item.correctAnswer;
     if (isCorrect) {
@@ -39,6 +82,31 @@ export const FlashBattle: React.FC<FlashBattleProps> = ({
       soundService.play('wrong');
       onAnswer(false);
     }
+
+    // Chờ 1.3 giây (trong khoảng 1 - 1.5s) hiển thị phản hồi Đúng/Sai, sau đó reset trạng thái và sang câu mới
+    timerRef.current = setTimeout(() => {
+      setSelectedAnswer(null);
+      setIsSubmitted(false);
+      setAnsweredState('idle');
+      setSlashAnim(false);
+      timerRef.current = null;
+      onNext();
+    }, 1300);
+  };
+
+  /**
+   * Cho phép người dùng chủ động bấm "Tiếp tục ngay" nếu không muốn chờ 1.3s
+   */
+  const handleManualNext = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedAnswer(null);
+    setIsSubmitted(false);
+    setAnsweredState('idle');
+    setSlashAnim(false);
+    onNext();
   };
 
   return (
@@ -78,7 +146,7 @@ export const FlashBattle: React.FC<FlashBattleProps> = ({
         <div>
           <button
             onClick={() => soundService.speakJapanese(item.audioText || item.question)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
           >
             <Volume2 className="w-3.5 h-3.5 text-rose-400" />
             <span>Nghe phát âm</span>
@@ -89,25 +157,25 @@ export const FlashBattle: React.FC<FlashBattleProps> = ({
       {/* 4 Choices Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {item.choices.map((choice, idx) => {
-          const isSelected = selectedChoice === choice;
+          const isSelected = selectedAnswer === choice;
           const isCorrect = choice === item.correctAnswer;
 
           let btnClass = 'bg-slate-900/90 border-slate-800 hover:border-rose-500/50 text-slate-200';
-          if (answeredState !== 'idle') {
+          if (isSubmitted) {
             if (isCorrect) {
-              btnClass = 'bg-emerald-950/80 border-emerald-500 text-emerald-200 ring-2 ring-emerald-500/50';
+              btnClass = 'bg-emerald-950/80 border-emerald-500 text-emerald-200 ring-2 ring-emerald-500/50 shadow-[0_0_15px_rgba(16,185,129,0.3)]';
             } else if (isSelected) {
-              btnClass = 'bg-rose-950/80 border-rose-500 text-rose-200';
+              btnClass = 'bg-rose-950/80 border-rose-500 text-rose-200 ring-2 ring-rose-500/50';
             } else {
-              btnClass = 'bg-slate-950/50 border-slate-900 text-slate-600 opacity-60';
+              btnClass = 'bg-slate-950/50 border-slate-900 text-slate-600 opacity-50';
             }
           }
 
           return (
             <button
-              key={idx}
-              onClick={() => handleSelect(choice)}
-              disabled={answeredState !== 'idle'}
+              key={`${item.id}_choice_${idx}`}
+              onClick={() => handleAnswerSelect(choice)}
+              disabled={isSubmitted}
               className={`p-4 rounded-xl border text-left font-bold text-sm sm:text-base transition-all duration-150 flex items-center justify-between cursor-pointer ${btnClass}`}
             >
               <span>{choice}</span>
@@ -120,7 +188,7 @@ export const FlashBattle: React.FC<FlashBattleProps> = ({
       </div>
 
       {/* Answer Feedback & Explanation */}
-      {answeredState !== 'idle' && (
+      {isSubmitted && (
         <div
           className={`p-5 rounded-2xl border text-sm space-y-2 animate-fadeIn ${
             answeredState === 'correct'
@@ -133,10 +201,10 @@ export const FlashBattle: React.FC<FlashBattleProps> = ({
               {answeredState === 'correct' ? '🎉 Chính xác! Tuyệt chiêu trúng đích!' : '❌ Chưa chính xác!'}
             </span>
             <button
-              onClick={onNext}
+              onClick={handleManualNext}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-slate-950 hover:bg-slate-200 shadow transition cursor-pointer"
             >
-              <span>Tiếp tục</span>
+              <span>Tiếp tục ngay</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

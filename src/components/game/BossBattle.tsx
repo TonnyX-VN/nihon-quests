@@ -32,6 +32,25 @@ export const BossBattle: React.FC<BossBattleProps> = ({
   const [answeredState, setAnsweredState] = useState<'idle' | 'correct' | 'wrong'>('idle');
   const [bossHitAnim, setBossHitAnim] = useState(false);
   const [playerHitAnim, setPlayerHitAnim] = useState(false);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedChoice(null);
+    setAnsweredState('idle');
+    setBossHitAnim(false);
+    setPlayerHitAnim(false);
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [item.id]);
 
   const maxBossHp = stage.bossHp || 100;
   const bossHpPercent = Math.max(0, Math.min(100, Math.round((bossCurrentHp / maxBossHp) * 100)));
@@ -39,6 +58,10 @@ export const BossBattle: React.FC<BossBattleProps> = ({
 
   const handleSelect = (choice: string) => {
     if (answeredState !== 'idle') return;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setSelectedChoice(choice);
 
     const isCorrect = choice === item.correctAnswer;
@@ -71,6 +94,24 @@ export const BossBattle: React.FC<BossBattleProps> = ({
       onPlayerDamage(20);
       onAnswer(false);
     }
+
+    // Auto next after 1.4s
+    timerRef.current = setTimeout(() => {
+      setSelectedChoice(null);
+      setAnsweredState('idle');
+      timerRef.current = null;
+      onNext();
+    }, 1400);
+  };
+
+  const handleManualNext = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedChoice(null);
+    setAnsweredState('idle');
+    onNext();
   };
 
   return (
@@ -234,7 +275,7 @@ export const BossBattle: React.FC<BossBattleProps> = ({
               {answeredState === 'correct' ? '💥 ĐÒN ĐÁNH TRÚNG ĐÍCH! BOSS MẤT MÁU NẶNG!' : '⚡ BẠN BỊ PHẢN ĐÒN! -20 HP!'}
             </span>
             <button
-              onClick={onNext}
+              onClick={handleManualNext}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-slate-950 hover:bg-slate-200 shadow transition cursor-pointer"
             >
               <span>Tiếp tục trận đánh</span>

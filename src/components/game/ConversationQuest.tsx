@@ -17,11 +17,32 @@ export const ConversationQuest: React.FC<ConversationQuestProps> = ({
 }) => {
   const [selectedChoice, setSelectedChoice] = useState<string | null>(null);
   const [answeredState, setAnsweredState] = useState<'idle' | 'correct' | 'wrong'>('idle');
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const speaker = item.speakerName || 'Người bản xứ (NPC)';
 
+  React.useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedChoice(null);
+    setAnsweredState('idle');
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [item.id]);
+
   const handleSelect = (choice: string) => {
     if (answeredState !== 'idle') return;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setSelectedChoice(choice);
 
     const isCorrect = choice === item.correctAnswer;
@@ -34,6 +55,23 @@ export const ConversationQuest: React.FC<ConversationQuestProps> = ({
       soundService.play('wrong');
       onAnswer(false);
     }
+
+    timerRef.current = setTimeout(() => {
+      setSelectedChoice(null);
+      setAnsweredState('idle');
+      timerRef.current = null;
+      onNext();
+    }, 1400);
+  };
+
+  const handleManualNext = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setSelectedChoice(null);
+    setAnsweredState('idle');
+    onNext();
   };
 
   return (
@@ -127,7 +165,7 @@ export const ConversationQuest: React.FC<ConversationQuestProps> = ({
               {answeredState === 'correct' ? '🎉 Đối đáp cực kỳ chuẩn mực & tự nhiên!' : '❌ Chưa phù hợp văn cảnh!'}
             </span>
             <button
-              onClick={onNext}
+              onClick={handleManualNext}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-white text-slate-950 hover:bg-slate-200 shadow transition cursor-pointer"
             >
               <span>Tiếp tục</span>

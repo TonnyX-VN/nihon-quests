@@ -5,7 +5,6 @@ import {
   signInWithPopup,
   signOut,
   onAuthStateChanged,
-  isEmailAuthorized,
   FirebaseUser
 } from './firebase';
 
@@ -14,7 +13,7 @@ export const AUTH_LOCAL_KEY = 'nihongo_quest_google_auth';
 export const googleAuthService = {
   /**
    * Đăng nhập bằng Google sử dụng hàm chuẩn `signInWithPopup(auth, googleProvider)` của Firebase Auth SDK.
-   * Đồng thời kiểm tra danh sách tài khoản được phép truy cập (whitelist).
+   * Cho phép mọi tài khoản Google đăng nhập trực tiếp.
    */
   async signInWithFirebasePopup(): Promise<{ success: boolean; profile?: UserAuthProfile; error?: string }> {
     try {
@@ -26,19 +25,7 @@ export const googleAuthService = {
         throw new Error('Không nhận được thông tin email từ Google.');
       }
 
-      // 2. YÊU CẦU 3: Kiểm tra email với whitelist
-      const isAllowed = isEmailAuthorized(user.email);
-      if (!isAllowed) {
-        // Tự động signOut ngay lập tức
-        await signOut(auth);
-        this.logout();
-        return {
-          success: false,
-          error: `Tài khoản (${user.email}) chưa được cấp quyền truy cập. Vui lòng liên hệ quản trị viên hoặc sử dụng tài khoản được phê duyệt.`
-        };
-      }
-
-      // 3. Nếu được cấp quyền, tạo profile và trả về
+      // 2. Tạo profile người dùng và cho phép đăng nhập trực tiếp
       const profile: UserAuthProfile = {
         provider: 'google',
         isLoggedIn: true,
@@ -108,15 +95,6 @@ export const googleAuthService = {
   onAuthStateChange(callback: (profile: UserAuthProfile | null, errorMsg?: string) => void) {
     return onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser && firebaseUser.email) {
-        // Kiểm tra whitelist
-        if (!isEmailAuthorized(firebaseUser.email)) {
-          console.warn(`[Firebase Auth] Email ${firebaseUser.email} is unauthorized. Signing out automatically.`);
-          await signOut(auth);
-          this.logout();
-          callback(null, 'Tài khoản của bạn chưa được cấp quyền truy cập');
-          return;
-        }
-
         const profile: UserAuthProfile = {
           provider: 'google',
           isLoggedIn: true,

@@ -44,21 +44,10 @@ googleProvider.addScope('profile');
 googleProvider.addScope('email');
 
 /**
- * DANH SÁCH TÀI KHOẢN ĐƯỢC PHÉP TRUY CẬP (WHITELIST NGẦM)
- * Chỉ những email được khai báo dưới đây mới có quyền đăng nhập.
+ * Cho phép tất cả tài khoản Google đăng nhập thành công qua Firebase Auth (Đã loại bỏ whitelist)
  */
-export const WHITELIST_EMAILS: string[] = [
-  'nguyendongduc1991@gmail.com',
-  'admin@nihongoquest.com'
-];
-
-/**
- * Kiểm tra xem một email có nằm trong danh sách được phép truy cập hay không
- */
-export function isEmailAuthorized(email?: string | null): boolean {
-  if (!email) return false;
-  const normalized = email.toLowerCase().trim();
-  return WHITELIST_EMAILS.some((allowed) => allowed.toLowerCase().trim() === normalized);
+export function isEmailAuthorized(_email?: string | null): boolean {
+  return true;
 }
 
 // Re-export các phương thức Firebase Auth cần thiết

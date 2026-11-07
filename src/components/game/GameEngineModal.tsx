@@ -32,7 +32,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
         .filter((q): q is LearningItem => !!q);
 
   // Fallback if question ids empty
-  const activeQuestions = stageQuestions.length > 0 ? stageQuestions : ALL_QUESTIONS.slice(0, 4);
+  const activeQuestions = stageQuestions.length > 0 ? stageQuestions : ALL_QUESTIONS.slice(0, 15);
 
   // Game Engine State
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -184,6 +184,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
       <div className="w-full max-w-3xl my-auto py-2">
         {stage.gameType === 'flash_battle' && (
           <FlashBattle
+            key={currentItem.id || `q_${currentIndex}`}
             item={currentItem}
             furiganaEnabled={user.furiganaEnabled}
             combo={combo}
@@ -194,6 +195,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
 
         {stage.gameType === 'sentence_builder' && (
           <SentenceBuilder
+            key={currentItem.id || `q_${currentIndex}`}
             item={currentItem}
             furiganaEnabled={user.furiganaEnabled}
             onAnswer={handleAnswer}
@@ -203,6 +205,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
 
         {stage.gameType === 'kanji_match' && (
           <KanjiMatch
+            key={currentItem.id || `q_${currentIndex}`}
             item={currentItem}
             stageItems={activeQuestions}
             onAnswer={handleAnswer}
@@ -212,6 +215,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
 
         {stage.gameType === 'listening_quest' && (
           <ListeningQuest
+            key={currentItem.id || `q_${currentIndex}`}
             item={currentItem}
             furiganaEnabled={user.furiganaEnabled}
             onAnswer={handleAnswer}
@@ -221,6 +225,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
 
         {stage.gameType === 'conversation_quest' && (
           <ConversationQuest
+            key={currentItem.id || `q_${currentIndex}`}
             item={currentItem}
             furiganaEnabled={user.furiganaEnabled}
             onAnswer={handleAnswer}
@@ -230,6 +235,7 @@ export const GameEngineModal: React.FC<GameEngineModalProps> = ({ stage, onClose
 
         {stage.gameType === 'boss_battle' && (
           <BossBattle
+            key={currentItem.id || `q_${currentIndex}`}
             item={currentItem}
             stage={stage}
             furiganaEnabled={user.furiganaEnabled}
